@@ -1,4 +1,4 @@
-import os
+e, context: ContextTypes.DEFAULT_TYPE):import os
 import requests
 import logging
 from datetime import datetime, timezone
@@ -534,7 +534,166 @@ def main():
     app.add_handler(CommandHandler("notif", notif_cmd))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_search))
+    
+    logger.info("🎬 Bobb MovieHunter Bot started!")
+    app.run_polling(drop_pending_updates=True)
 
-    # ── JADWAL NOTIFIKASI OTOMATIS (UTC = WIB-7) ──
-    from datetime import time as dtime
-    job_queue = app
+if __na
+    await browse_country_drama(update, context, "JP", "Jepang 🇯🇵")
+
+async def text_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query ch/movie", {"query": query})
+    tv_data = tmdb_get("/search/tv", {"query": query})
+    
+    movies = [r for r in movie_data.get("results", [])
+              if r.get("original_language") != "id"][:3]
+    tvs = [r for r in tv_data.get("results", [])
+           if r.get("original_language") != "id"][:3]
+    
+    if not movies and not tvs:
+        await update.message.reply_text("❌ Tidak ditemukan. Coba judul lain.")
+        return
+    
+    keyboard = []
+    text = f"🎬 *Hasil: {query}*\n\n"
+    
+    if movies:
+        text += "🎬 *Film:*\n"
+        for m in movies:
+            title = m.get("title", "?")
+            year = (m.get("release_date") or "")[:4]
+            rating = m.get("vote_average", 0)
+            text += f"• {title} ({year}) ⭐{rating:.1f}\n"
+            keyboard.append([InlineKeyboardButton(
+                f"🎬 {title} ({year})", callback_data=f"movie_{m['id']}"
+            )])
+    
+    if tvs:
+        text += "\n📺 *Series/Drama:*\n"
+        for m in tvs:
+            title = m.get("name", "?")
+            year = (m.get("first_air_date") or "")[:4]
+            rating = m.get("vote_average", 0)
+            text += f"• {title} ({year}) ⭐{rating:.1f}\n"
+            keyboard.append([InlineKeyboardButton(
+                f"📺 {title} ({year})", callback_data=f"tv_{m['id']}"
+            )])
+    
+    await update.message.reply_text(
+        text, parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ── CALLBACKS ─────────────────────────────────────────────────────────────────
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    
+    if data.startswith("movie_"):
+        movie_id = data.split("_")[1]
+        await show_movie_detail(query, movie_id)
+    elif data.startswith("tv_"):
+        tv_id = data.split("_")[1]
+        await show_tv_detail(query, tv_id)
+    elif data == "notif_coming":
+        await query.message.reply_text("⏳ Mengambil data coming soon...")
+        await send_coming_soon(context)
+    elif data == "notif_playing":
+        await query.message.reply_text("⏳ Mengambil data now playing...")
+        await send_now_playing(context)
+    elif data == "notif_trending":
+        await query.message.reply_text("⏳ Mengambil data trending...")
+        await send_trending_daily(context)
+
+async def show_movie_detail(query, movie_id):
+    item = tmdb_get(f"/movie/{movie_id}", {"append_to_response": "credits"})
+    
+    title = item.get("title", "?")
+    year = (item.get("release_date") or "")[:4]
+    rating = item.get("vote_average", 0)
+    runtime = item.get("runtime", 0)
+    genres = ", ".join([g["name"] for g in item.get("genres", [])])
+    overview = item.get("overview", "Tidak ada sinopsis.")[:400]
+    status = item.get("status", "")
+    
+    # Cast top 5
+    cast = item.get("credits", {}).get("cast", [])[:5]
+    cast_str = ", ".join([c["name"] for c in cast]) if cast else "-"
+    
+    # Release dates
+    theatrical, digital, bluray = get_release_info(movie_id, "movie")
+    quality_status = get_status_emoji(theatrical, digital, bluray)
+    
+    hours = runtime // 60
+    mins = runtime % 60
+    duration = f"{hours}j {mins}m" if hours else f"{mins}m"
+    
+    text = (
+        f"🎬 *{title}* ({year})\n"
+        f"⭐ *{rating:.1f}/10*\n"
+        f"⏱ {duration} | 🎭 {genres}\n\n"
+        f"📖 {overview}\n\n"
+        f"👥 *Cast:* {cast_str}\n\n"
+        f"📅 *Rilis Bioskop:* {theatrical or '-'}\n"
+        f"📺 *Rilis Digital:* {digital or '-'}\n"
+        f"💿 *Rilis Bluray:* {bluray or '-'}\n\n"
+        f"🎯 *Status Kualitas:*\n{quality_status}"
+    )
+    
+    poster = item.get("poster_path")
+    justwatch_url = f"{JUSTWATCH_BASE}{requests.utils.quote(title)}"
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📺 Where to Watch", url=justwatch_url)],
+        [InlineKeyboardButton("🎬 Trailer YouTube", url=f"https://www.youtube.com/results?search_query={requests.utils.quote(title+' '+year+' trailer')}")]
+    ])
+    
+    if poster:
+        await query.message.reply_photo(
+            photo=f"{TMDB_IMG}{poster}",
+            caption=text,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+    else:
+        await query.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+
+async def show_tv_detail(query, tv_id):
+    item = tmdb_get(f"/tv/{tv_id}", {"append_to_response": "credits"})
+    
+    title = item.get("name", "?")
+    year = (item.get("first_air_date") or "")[:4]
+    rating = item.get("vote_average", 0)
+    episodes = item.get("number_of_episodes", 0)
+    seasons = item.get("number_of_seasons", 0)
+    genres = ", ".join([g["name"] for g in item.get("genres", [])])
+    overview = item.get("overview", "Tidak ada sinopsis.")[:400]
+    status = item.get("status", "")
+    network = ", ".join([n["name"] for n in item.get("networks", [])])
+    origin = ", ".join(item.get("origin_country", []))
+    
+    # Cast
+    cast = item.get("credits", {}).get("cast", [])[:5]
+    cast_str = ", ".join([c["name"] for c in cast]) if cast else "-"
+    
+    status_icon = "✅ Selesai" if status == "Ended" else "🟢 Ongoing"
+    
+    text = (
+        f"📺 *{title}* ({year})\n"
+        f"⭐ *{rating:.1f}/10* | 🌏 {origin}\n"
+        f"🎭 {genres}\n\n"
+        f"📖 {overview}\n\n"
+        f"👥 *Cast:* {cast_str}\n\n"
+        f"📡 *Network:* {network or '-'}\n"
+        f"🎬 *Season:* {seasons} | 📋 *Episode:* {episodes}\n"
+        f"📊 *Status:* {status_icon}"
+    )
+    
+    poster = item.get("poster_path")
+    justwatch_url = f"{JUSTWATCH_BASE}{requests.utils.quote(title)}"
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📺 Where to Watch", url=justwatch_url)],
+        [InlineKeyboardButton("🎬 Trailer YouTube", url=f"https://www.youtube.com/results?search_query={requ
