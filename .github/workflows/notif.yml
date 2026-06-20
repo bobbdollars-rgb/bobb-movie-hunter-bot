@@ -1,0 +1,45 @@
+name: Bobb MovieHunter Notifikasi
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 07:00 WIB - Trending
+    - cron: '0 5 * * *'   # 12:00 WIB - Now Playing
+    - cron: '0 13 * * *'  # 20:00 WIB - Coming Soon
+  workflow_dispatch:
+
+jobs:
+  send-notif:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install requests
+
+      - name: Trending (07:00 WIB)
+        if: github.event.schedule == '0 0 * * *' || github.event_name == 'workflow_dispatch'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          NOTIF_TYPE: trending
+        run: python send_notif.py
+
+      - name: Now Playing (12:00 WIB)
+        if: github.event.schedule == '0 5 * * *'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          NOTIF_TYPE: now_playing
+        run: python send_notif.py
+
+      - name: Coming Soon (20:00 WIB)
+        if: github.event.schedule == '0 13 * * *'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          NOTIF_TYPE: coming_soon
+        run: python send_notif.py
+        
