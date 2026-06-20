@@ -314,7 +314,14 @@ async def show_movie_detail(query, movie_id):
     rating = item.get("vote_average", 0)
     runtime = item.get("runtime", 0)
     genres = ", ".join([g["name"] for g in item.get("genres", [])])
-    overview = item.get("overview", "Tidak ada sinopsis.")[:400]
+    overview = item.get("overview", "")
+    if not overview:
+        try:
+            r_en = requests.get(f"{TMDB_BASE}/movie/{movie_id}", params={"api_key": TMDB_API_KEY, "language": "en-US"}, timeout=10)
+            overview = r_en.json().get("overview", "Tidak ada sinopsis.")
+        except:
+            overview = "Tidak ada sinopsis."
+    overview = overview[:400]
     status = item.get("status", "")
     
     # Cast top 5
@@ -368,7 +375,14 @@ async def show_tv_detail(query, tv_id):
     episodes = item.get("number_of_episodes", 0)
     seasons = item.get("number_of_seasons", 0)
     genres = ", ".join([g["name"] for g in item.get("genres", [])])
-    overview = item.get("overview", "Tidak ada sinopsis.")[:400]
+    overview = item.get("overview", "")
+    if not overview:
+        try:
+            r_en = requests.get(f"{TMDB_BASE}/movie/{movie_id}", params={"api_key": TMDB_API_KEY, "language": "en-US"}, timeout=10)
+            overview = r_en.json().get("overview", "Tidak ada sinopsis.")
+        except:
+            overview = "Tidak ada sinopsis."
+    overview = overview[:400]
     status = item.get("status", "")
     network = ", ".join([n["name"] for n in item.get("networks", [])])
     origin = ", ".join(item.get("origin_country", []))
