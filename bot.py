@@ -1,7 +1,7 @@
 import os
 import requests
 import logging
-from datetime import datetime, time
+from datetime import datetime, timezone
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -536,5 +536,5 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_search))
 
     # ── JADWAL NOTIFIKASI OTOMATIS (UTC = WIB-7) ──
-    job_queue = app.job_queue
-    # Pagi 07:00 WIB = 00:00 UTC
+    from datetime import time as dtime
+    job_queue = app
