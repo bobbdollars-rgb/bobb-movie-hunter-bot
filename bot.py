@@ -1,6 +1,7 @@
 import os
 import requests
 import logging
+from datetime import datetime, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -17,6 +18,7 @@ TMDB_IMG = "https://image.tmdb.org/t/p/w500"
 JUSTWATCH_BASE = "https://www.justwatch.com/id/search?q="
 
 EXCLUDED_COUNTRIES = ["ID"]  # Skip Indonesia
+OWNER_CHAT_ID = 680378702  # Bobb chat ID
 
 # ── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -294,6 +296,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("tv_"):
         tv_id = data.split("_")[1]
         await show_tv_detail(query, tv_id)
+    elif data == "notif_coming":
+        await query.message.reply_text("⏳ Mengambil data coming soon...")
+        await send_coming_soon(context)
+    elif data == "notif_playing":
+        await query.message.reply_text("⏳ Mengambil data now playing...")
+        await send_now_playing(context)
+    elif data == "notif_trending":
+        await query.message.reply_text("⏳ Mengambil data trending...")
+        await send_trending_daily(context)
 
 async def show_movie_detail(query, movie_id):
     item = tmdb_get(f"/movie/{movie_id}", {"append_to_response": "credits"})
@@ -399,6 +410,116 @@ async def show_tv_detail(query, tv_id):
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
+# ── DAILY NOTIFICATIONS ───────────────────────────────────────────────────────
+
+async def send_coming_soon(context):
+    """Kirim film yang akan segera rilis"""
+    try:
+        data = tmdb_get("/movie/upcoming", {"region": "US"})
+        results = [r for r in data.get("results", [])
+                   if r.get("original_language") != "id"][:5]
+        
+        if not results:
+            return
+        
+        text = "🎬 *Film Yang Akan Segera Rilis!*\n\n"
+        keyboard = []
+        for i, m in enumerate(results, 1):
+            title = m.get("title", "?")
+            date = (m.get("release_date") or "")[:10]
+            rating = m.get("vote_average", 0)
+            text += f"{i}. *{title}*\n📅 {date} | ⭐{rating:.1f}\n\n"
+            keyboard.append([InlineKeyboardButton(
+                f"📋 {title}", callback_data=f"movie_{m['id']}"
+            )])
+        
+        await context.bot.send_message(
+            chat_id=OWNER_CHAT_ID,
+            text=text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        logger.info("✅ Coming soon notification sent!")
+    except Exception as e:
+        logger.error(f"Error sending coming soon: {e}")
+
+async def send_now_playing(context):
+    """Kirim film yang lagi tayang di bioskop"""
+    try:
+        data = tmdb_get("/movie/now_playing", {"region": "US"})
+        results = [r for r in data.get("results", [])
+                   if r.get("original_language") != "id"][:5]
+        
+        if not results:
+            return
+        
+        text = "🍿 *Film Lagi Tayang di Bioskop!*\n\n"
+        keyboard = []
+        for i, m in enumerate(results, 1):
+            title = m.get("title", "?")
+            rating = m.get("vote_average", 0)
+            text += f"{i}. *{title}* ⭐{rating:.1f}\n"
+            keyboard.append([InlineKeyboardButton(
+                f"📋 {title}", callback_data=f"movie_{m['id']}"
+            )])
+        
+        await context.bot.send_message(
+            chat_id=OWNER_CHAT_ID,
+            text=text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        logger.info("✅ Now playing notification sent!")
+    except Exception as e:
+        logger.error(f"Error sending now playing: {e}")
+
+async def send_trending_daily(context):
+    """Kirim trending harian"""
+    try:
+        data = tmdb_get("/trending/all/day")
+        results = [r for r in data.get("results", [])
+                   if r.get("original_language") != "id"][:5]
+        
+        if not results:
+            return
+        
+        text = "🔥 *Trending Hari Ini!*\n\n"
+        keyboard = []
+        for i, m in enumerate(results, 1):
+            title = m.get("title") or m.get("name", "?")
+            media = "🎬" if m.get("media_type") == "movie" else "📺"
+            rating = m.get("vote_average", 0)
+            text += f"{i}. {media} *{title}* ⭐{rating:.1f}\n"
+            ctype = m.get("media_type", "movie")
+            keyboard.append([InlineKeyboardButton(
+                f"{media} {title}", callback_data=f"{ctype}_{m['id']}"
+            )])
+        
+        await context.bot.send_message(
+            chat_id=OWNER_CHAT_ID,
+            text=text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        logger.info("✅ Trending daily notification sent!")
+    except Exception as e:
+        logger.error(f"Error sending trending: {e}")
+
+async def notif_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manual trigger notifikasi"""
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎬 Coming Soon", callback_data="notif_coming")],
+        [InlineKeyboardButton("🍿 Now Playing", callback_data="notif_playing")],
+        [InlineKeyboardButton("🔥 Trending Hari Ini", callback_data="notif_trending")],
+    ])
+    await update.message.reply_text(
+        "📲 *Pilih notifikasi yang mau dikirim:*",
+        parse_mode="Markdown",
+        reply_markup=keyboard
+    )
+
+# ── MAIN ──────────────────────────────────────────────────────────────────────
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
@@ -410,11 +531,10 @@ def main():
     app.add_handler(CommandHandler("korea", korea))
     app.add_handler(CommandHandler("china", china))
     app.add_handler(CommandHandler("japan", japan))
+    app.add_handler(CommandHandler("notif", notif_cmd))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_search))
-    
-    logger.info("🎬 Bobb MovieHunter Bot started!")
-    app.run_polling(drop_pending_updates=True)
 
-if __name__ == "__main__":
-    main()
+    # ── JADWAL NOTIFIKASI OTOMATIS (UTC = WIB-7) ──
+    job_queue = app.job_queue
+    # Pagi 07:00 WIB = 00:00 UTC
