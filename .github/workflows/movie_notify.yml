@@ -1,0 +1,38 @@
+name: Movie Notifier
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # tiap jam, 24x sehari (TMDb data cuma update per-hari, jadi ini udah "secepat mungkin")
+  workflow_dispatch: {}     # bisa trigger manual dari tab Actions
+
+permissions:
+  contents: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run movie notifier
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REGION: ID
+        run: python movie_notifier.py
+
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add posted_state.json
+          git diff --staged --quiet || git commit -m "chore: update posted state"
+          git push
