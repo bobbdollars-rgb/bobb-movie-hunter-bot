@@ -1,0 +1,27 @@
+name: Monthly Movie Schedule
+
+on:
+  schedule:
+    - cron: "0 1 1 * *"   # tanggal 1 tiap bulan, 08:00 WIB
+  workflow_dispatch: {}     # bisa trigger manual buat testing
+
+jobs:
+  monthly-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Send monthly schedule digest
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REGION: ID
+        run: python monthly_schedule.py
